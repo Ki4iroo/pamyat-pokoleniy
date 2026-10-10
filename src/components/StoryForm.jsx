@@ -1,67 +1,60 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/StoreContext';
+import { transcribe, transcribeEnabled } from '../lib/transcribe';
 import { MicIcon, StopIcon } from './Icons';
-
-// URL сервера транскрипции — меняй на свой домен/IP после деплоя
-const TRANSCRIBE_URL = import.meta.env.VITE_TRANSCRIBE_URL || '';
 
 function pickMimeType() {
   if (typeof MediaRecorder === 'undefined') return null;
   const types = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'];
-  return types.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? '';
+  return types.find((type) => MediaRecorder.isTypeSupported?.(type)) ?? '';
 }
 
 function VoiceButton({ onText }) {
-  const [state, setState] = useState('idle'); // idle | recording | uploading | error
-  const [errorMsg, setErrorMsg] = useState('');
+  const { t } = useStore();
+  const [state, setState] = useState('idle'); // idle | recording | uploading
+  const [error, setError] = useState('');
   const recRef = useRef(null);
-  const chunksRef = useRef([]);
+  const mountedRef = useRef(true);
 
   useEffect(() => () => {
-    recRef.current?.stream?.getTracks().forEach((t) => t.stop());
+    mountedRef.current = false;
+    if (recRef.current?.state === 'recording') {
+      recRef.current.onstop = null;
+      recRef.current.stop();
+    }
+    recRef.current?.stream.getTracks().forEach((tr) => tr.stop());
   }, []);
 
   const start = async () => {
-    setErrorMsg('');
-    if (!TRANSCRIBE_URL) {
-      setErrorMsg('Сервер транскрипции не настроен');
-      return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setErrorMsg('Микрофон недоступен в этом браузере');
+    setError('');
+    const mimeType = pickMimeType();
+    if (mimeType === null || !navigator.mediaDevices?.getUserMedia) {
+      setError(t('audioUnsupported'));
       return;
     }
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
-      setErrorMsg('Нет доступа к микрофону');
+      setError(t('micDenied'));
       return;
     }
 
-    const mimeType = pickMimeType();
-    const recorder = new MediaRecorder(stream, {
-      ...(mimeType && { mimeType }),
-      audioBitsPerSecond: 32000,
-    });
-    chunksRef.current = [];
-    recorder.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
+    const recorder = new MediaRecorder(stream, { ...(mimeType && { mimeType }), audioBitsPerSecond: 32000 });
+    const chunks = [];
+    recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     recorder.onstop = async () => {
-      stream.getTracks().forEach((t) => t.stop());
-      setState('uploading');
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      stream.getTracks().forEach((tr) => tr.stop());
+      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
       try {
-        const fd = new FormData();
-        fd.append('file', blob, 'audio.webm');
-        const res = await fetch(TRANSCRIBE_URL, { method: 'POST', body: fd });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const { text } = await res.json();
+        const text = await transcribe(blob);
+        if (!mountedRef.current) return;
         if (text) onText(text);
-        else setErrorMsg('Текст не распознан');
-      } catch (e) {
-        setErrorMsg('Ошибка транскрипции: ' + e.message);
+        else setError(t('dictationEmpty'));
+      } catch {
+        if (mountedRef.current) setError(t('dictationFailed'));
       }
-      setState('idle');
+      if (mountedRef.current) setState('idle');
     };
 
     recRef.current = recorder;
@@ -74,32 +67,23 @@ function VoiceButton({ onText }) {
     setState('uploading');
   };
 
-  if (state === 'recording') {
-    return (
-      <div className="recorder">
-        <button type="button" className="btn btn--recording btn--block" onClick={stop}>
-          <span className="rec-dot" /><StopIcon /> Остановить и расшифровать
-        </button>
-      </div>
-    );
-  }
-
-  if (state === 'uploading') {
-    return (
-      <div className="recorder">
-        <button type="button" className="btn btn--secondary btn--block" disabled>
-          ⏳ Расшифровка...
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div className="recorder">
-      <button type="button" className="btn btn--secondary btn--block" onClick={start}>
-        <MicIcon /> Надиктовать голосом
-      </button>
-      {errorMsg && <p className="recorder__error">{errorMsg}</p>}
+    <div className="recorder dictation">
+      {state === 'recording' && (
+        <button type="button" className="btn btn--recording btn--block" onClick={stop}>
+          <span className="rec-dot" /><StopIcon /> {t('dictationStop')}
+        </button>
+      )}
+      {state === 'uploading' && (
+        <button type="button" className="btn btn--secondary btn--block" disabled>{t('dictationBusy')}</button>
+      )}
+      {state === 'idle' && (
+        <button type="button" className="btn btn--secondary btn--block" onClick={start}>
+          <MicIcon /> {t('dictate')}
+        </button>
+      )}
+      <p className="muted dictation__note">{t('dictationNote')}</p>
+      {error && <p className="recorder__error">{error}</p>}
     </div>
   );
 }
@@ -137,7 +121,7 @@ export default function StoryForm({ defaultRelativeId = '', onSubmit, onCancel }
         <span>{t('text')}</span>
         <textarea rows={6} value={form.text} onChange={set('text')} required />
       </label>
-      <VoiceButton onText={appendText} />
+      {transcribeEnabled && <VoiceButton onText={appendText} />}
       <div className="form__actions">
         <button type="button" className="btn btn--ghost" onClick={onCancel}>{t('cancel')}</button>
         <button type="submit" className="btn btn--primary">{t('save')}</button>

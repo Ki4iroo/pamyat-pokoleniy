@@ -278,3 +278,5 @@ svg { flex-shrink: 0; }
 .onb__dot { width: 8px; height: 8px; border-radius: 4px; background: var(--border); transition: width .2s, background .2s; }
 .onb__dot--active { width: 24px; background: var(--accent); }
 @keyframes onb-in { from { opacity: 0; transform: translateY(12px); } }
+.dictation { margin-top: -4px; }
+.dictation__note { margin-top: 6px; font-size: 12px; }

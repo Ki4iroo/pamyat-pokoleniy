@@ -25,6 +25,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Адрес сервера расшифровки; пока переменная не задана, диктовка скрыта
+          VITE_TRANSCRIBE_URL: ${{ vars.VITE_TRANSCRIBE_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
