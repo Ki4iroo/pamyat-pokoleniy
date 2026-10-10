@@ -2,61 +2,105 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/StoreContext';
 import { MicIcon, StopIcon } from './Icons';
 
-const SpeechRecognition =
-  typeof window !== 'undefined'
-    ? window.SpeechRecognition || window.webkitSpeechRecognition
-    : null;
+// URL сервера транскрипции — меняй на свой домен/IP после деплоя
+const TRANSCRIBE_URL = import.meta.env.VITE_TRANSCRIBE_URL || '';
+
+function pickMimeType() {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const types = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'];
+  return types.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? '';
+}
 
 function VoiceButton({ onText }) {
-  const [state, setState] = useState('idle'); // idle | listening | unsupported
+  const [state, setState] = useState('idle'); // idle | recording | uploading | error
+  const [errorMsg, setErrorMsg] = useState('');
   const recRef = useRef(null);
+  const chunksRef = useRef([]);
 
-  useEffect(() => {
-    if (!SpeechRecognition) setState('unsupported');
+  useEffect(() => () => {
+    recRef.current?.stream?.getTracks().forEach((t) => t.stop());
   }, []);
 
-  const start = () => {
-    const rec = new SpeechRecognition();
-    rec.lang = 'ru-RU';
-    rec.continuous = true;
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
+  const start = async () => {
+    setErrorMsg('');
+    if (!TRANSCRIBE_URL) {
+      setErrorMsg('Сервер транскрипции не настроен');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErrorMsg('Микрофон недоступен в этом браузере');
+      return;
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setErrorMsg('Нет доступа к микрофону');
+      return;
+    }
 
-    rec.onresult = (e) => {
-      const text = Array.from(e.results)
-        .map((r) => r[0].transcript)
-        .join(' ');
-      onText(text);
+    const mimeType = pickMimeType();
+    const recorder = new MediaRecorder(stream, {
+      ...(mimeType && { mimeType }),
+      audioBitsPerSecond: 32000,
+    });
+    chunksRef.current = [];
+    recorder.ondataavailable = (e) => e.data.size && chunksRef.current.push(e.data);
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      setState('uploading');
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+      try {
+        const fd = new FormData();
+        fd.append('file', blob, 'audio.webm');
+        const res = await fetch(TRANSCRIBE_URL, { method: 'POST', body: fd });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { text } = await res.json();
+        if (text) onText(text);
+        else setErrorMsg('Текст не распознан');
+      } catch (e) {
+        setErrorMsg('Ошибка транскрипции: ' + e.message);
+      }
+      setState('idle');
     };
 
-    rec.onerror = () => setState('idle');
-    rec.onend = () => setState('idle');
-
-    recRef.current = rec;
-    rec.start();
-    setState('listening');
+    recRef.current = recorder;
+    recorder.start();
+    setState('recording');
   };
 
   const stop = () => {
-    recRef.current?.stop();
-    setState('idle');
+    if (recRef.current?.state === 'recording') recRef.current.stop();
+    setState('uploading');
   };
 
-  if (state === 'unsupported') return null;
-
-  if (state === 'listening') {
+  if (state === 'recording') {
     return (
-      <button type="button" className="btn btn--recording btn--block" onClick={stop}>
-        <span className="rec-dot" />
-        <StopIcon /> Остановить диктовку
-      </button>
+      <div className="recorder">
+        <button type="button" className="btn btn--recording btn--block" onClick={stop}>
+          <span className="rec-dot" /><StopIcon /> Остановить и расшифровать
+        </button>
+      </div>
+    );
+  }
+
+  if (state === 'uploading') {
+    return (
+      <div className="recorder">
+        <button type="button" className="btn btn--secondary btn--block" disabled>
+          ⏳ Расшифровка...
+        </button>
+      </div>
     );
   }
 
   return (
-    <button type="button" className="btn btn--secondary btn--block" onClick={start}>
-      <MicIcon /> Надиктовать голосом
-    </button>
+    <div className="recorder">
+      <button type="button" className="btn btn--secondary btn--block" onClick={start}>
+        <MicIcon /> Надиктовать голосом
+      </button>
+      {errorMsg && <p className="recorder__error">{errorMsg}</p>}
+    </div>
   );
 }
 
@@ -66,10 +110,7 @@ export default function StoryForm({ defaultRelativeId = '', onSubmit, onCancel }
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const appendText = (text) =>
-    setForm((f) => ({
-      ...f,
-      text: f.text ? f.text + ' ' + text : text,
-    }));
+    setForm((f) => ({ ...f, text: f.text ? f.text + ' ' + text : text }));
 
   const submit = (e) => {
     e.preventDefault();
