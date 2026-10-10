@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/StoreContext';
 import { calcAge, pluralYears } from '../lib/utils';
 import { haptic } from '../lib/telegram';
@@ -14,6 +14,15 @@ export default function FamilyScreen() {
   const { relatives, addRelative, t, lang } = useStore();
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
+  const [params, setParams] = useSearchParams();
+
+  // /?add=1 — открыть форму сразу (переход из онбординга)
+  useEffect(() => {
+    if (params.get('add')) {
+      setAdding(true);
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
 
   const handleAdd = (data) => {
     addRelative(data);

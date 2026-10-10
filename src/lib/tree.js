@@ -45,55 +45,136 @@ export function computeGenerations(relatives) {
   return gen;
 }
 
+// Семейная ячейка: родители + их общие дети. Супруги — те, у кого есть общий ребёнок.
 export function layoutTree(relatives, { nodeW = 92, gapX = 14, rowH = 132 } = {}) {
-  if (!relatives.length) return { nodes: [], edges: [], width: 0, height: 0 };
+  if (!relatives.length) return { nodes: [], units: [], width: 0, height: 0 };
 
+  const byId = new Map(relatives.map((r) => [r.id, r]));
+  const parentsIn = (r) => (r.parentIds || []).filter((p) => byId.has(p));
   const gen = computeGenerations(relatives);
   const depth = Math.max(...gen.values()) + 1;
-  const rows = Array.from({ length: depth }, () => []);
-  relatives.forEach((r) => rows[gen.get(r.id)].push(r));
 
+  const partners = new Map(relatives.map((r) => [r.id, new Set()]));
   const childrenOf = new Map(relatives.map((r) => [r.id, []]));
-  relatives.forEach((r) => (r.parentIds || []).forEach((p) => childrenOf.get(p)?.push(r.id)));
-
-  const pos = new Map();
-  const index = () => rows.forEach((row) => row.forEach((r, i) => pos.set(r.id, i)));
-  const avg = (ids, fallback) => {
-    const xs = ids.filter((id) => pos.has(id)).map((id) => pos.get(id));
-    return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : fallback;
-  };
-
-  index();
-  for (let sweep = 0; sweep < 4; sweep++) {
-    for (let g = 1; g < depth; g++) {
-      rows[g].sort((a, b) => avg(a.parentIds || [], pos.get(a.id)) - avg(b.parentIds || [], pos.get(b.id)));
-      index();
+  const unitMap = new Map();
+  for (const r of relatives) {
+    const ps = parentsIn(r);
+    ps.forEach((p) => childrenOf.get(p).push(r.id));
+    if (ps.length === 2) {
+      partners.get(ps[0]).add(ps[1]);
+      partners.get(ps[1]).add(ps[0]);
     }
-    for (let g = depth - 2; g >= 0; g--) {
-      rows[g].sort((a, b) => avg(childrenOf.get(a.id), pos.get(a.id)) - avg(childrenOf.get(b.id), pos.get(b.id)));
-      index();
+    if (ps.length) {
+      const key = [...ps].sort().join('|');
+      if (!unitMap.has(key)) unitMap.set(key, { id: key, parents: ps, children: [] });
+      unitMap.get(key).children.push(r.id);
     }
   }
 
-  const maxCount = Math.max(...rows.map((row) => row.length));
-  const width = maxCount * nodeW + (maxCount - 1) * gapX;
-  const nodes = [];
-  rows.forEach((row, g) => {
-    const rowW = row.length * nodeW + (row.length - 1) * gapX;
-    const offset = (width - rowW) / 2;
-    row.forEach((r, i) => nodes.push({
-      relative: r,
-      x: offset + i * (nodeW + gapX),
-      y: g * rowH,
-    }));
-  });
+  const rows = Array.from({ length: depth }, () => []);
+  relatives.forEach((r) => rows[gen.get(r.id)].push(r.id));
+  const pos = new Map();
+  const index = () => rows.forEach((row) => row.forEach((id, i) => pos.set(id, i)));
+  index();
 
+  const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const byBirth = (a, b) => (byId.get(a).birthDate || '').localeCompare(byId.get(b).birthDate || '');
+
+  const orderRow = (g, useChildren) => {
+    const groups = new Map(); // key -> { members, bary }
+    const attached = new Map(); // id партнёра -> супруги без родителей, встающие рядом
+    const groupOf = new Map();
+
+    for (const id of rows[g]) {
+      const ps = parentsIn(byId.get(id));
+      if (ps.length) {
+        const key = 'p:' + [...ps].sort().join('|');
+        if (!groups.has(key)) groups.set(key, { members: [], bary: avg(ps.map((p) => pos.get(p))) });
+        groups.get(key).members.push(id);
+        groupOf.set(id, key);
+        continue;
+      }
+      const rowPartners = [...partners.get(id)].filter((p) => gen.get(p) === g);
+      const anchor = rowPartners.find((p) => parentsIn(byId.get(p)).length);
+      if (anchor) {
+        if (!attached.has(anchor)) attached.set(anchor, []);
+        attached.get(anchor).push(id);
+        continue;
+      }
+      // Пара (или одиночка) без родителей — общая группа
+      const couple = [id, ...rowPartners.filter((p) => !parentsIn(byId.get(p)).length)].sort();
+      const key = 'c:' + couple[0];
+      if (!groups.has(key)) {
+        const kids = couple.flatMap((c) => childrenOf.get(c)).filter((k) => gen.get(k) === g + 1);
+        const bary = useChildren && kids.length ? avg(kids.map((k) => pos.get(k))) : avg(couple.map((c) => pos.get(c)));
+        groups.set(key, { members: [], bary });
+      }
+      groups.get(key).members.push(id);
+      groupOf.set(id, key);
+    }
+
+    const sorted = [...groups.entries()].sort((a, b) => a[1].bary - b[1].bary);
+    const groupRank = new Map(sorted.map(([key], i) => [key, i]));
+
+    // Внутри группы: тот, чей супруг левее, — к левому краю, правее — к правому
+    const side = (id) => {
+      if (attached.has(id)) return 1;
+      const own = groupRank.get(groupOf.get(id));
+      const other = [...partners.get(id)].map((p) => groupRank.get(groupOf.get(p))).find((r) => r !== undefined && r !== own);
+      return other === undefined ? 0 : Math.sign(other - own);
+    };
+
+    const result = [];
+    for (const [, { members }] of sorted) {
+      members.sort((a, b) => side(a) - side(b) || byBirth(a, b));
+      for (const id of members) result.push(id, ...(attached.get(id) || []));
+    }
+    rows[g] = result;
+    index();
+  };
+
+  for (let iter = 0; iter < 3; iter++) {
+    for (let g = 0; g < depth; g++) orderRow(g, iter > 0);
+  }
+
+  // Координаты: ряд за рядом, дети стараются встать под своими родителями
+  const step = nodeW + gapX;
+  const x = new Map();
+  rows[0].forEach((id, i) => x.set(id, i * step));
+  for (let g = 1; g < depth; g++) {
+    let cursor = -Infinity;
+    let i = 0;
+    const row = rows[g];
+    while (i < row.length) {
+      // Непрерывный блок одной ячейки (братья/сёстры + пристыкованные супруги)
+      const key = [...parentsIn(byId.get(row[i]))].sort().join('|');
+      let j = i + 1;
+      while (j < row.length) {
+        const ps = parentsIn(byId.get(row[j]));
+        if (ps.length && [...ps].sort().join('|') !== key) break;
+        if (!ps.length && !key) break;
+        j++;
+      }
+      const block = row.slice(i, j);
+      const width = block.length * step - gapX;
+      const ps = parentsIn(byId.get(row[i]));
+      const desired = ps.length ? avg(ps.map((p) => x.get(p) + nodeW / 2)) - width / 2 : cursor;
+      const left = Math.max(desired, cursor === -Infinity ? desired : cursor);
+      block.forEach((id, k) => x.set(id, left + k * step));
+      cursor = left + width + gapX;
+      i = j;
+    }
+  }
+
+  const minX = Math.min(...x.values());
+  const nodes = relatives.map((r) => ({ relative: r, x: x.get(r.id) - minX, y: gen.get(r.id) * rowH }));
+  const width = Math.max(...nodes.map((n) => n.x)) + nodeW;
   const nodeById = new Map(nodes.map((n) => [n.relative.id, n]));
-  const edges = [];
-  nodes.forEach((child) => (child.relative.parentIds || []).forEach((pid) => {
-    const parent = nodeById.get(pid);
-    if (parent) edges.push({ id: `${pid}-${child.relative.id}`, from: parent, to: child });
+  const units = [...unitMap.values()].map((u) => ({
+    id: u.id,
+    parents: u.parents.map((p) => nodeById.get(p)),
+    children: u.children.map((c) => nodeById.get(c)),
   }));
 
-  return { nodes, edges, width, height: depth * rowH - (rowH - 96), nodeW };
+  return { nodes, units, width, height: depth * rowH - (rowH - 96), nodeW };
 }

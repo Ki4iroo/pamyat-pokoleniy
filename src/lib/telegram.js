@@ -34,10 +34,22 @@ export function showBackButton(onClick) {
   };
 }
 
-export function shareApp(text) {
-  const url = 'https://t.me/share/url?url=' + encodeURIComponent(window.location.href) +
-    '&text=' + encodeURIComponent(text);
-  if (tg?.openTelegramLink) tg.openTelegramLink(url);
-  else if (navigator.share) navigator.share({ text, url: window.location.href }).catch(() => {});
-  else window.open(url, '_blank');
+// Ссылка на приложение без hash-части: в Telegram там лежат данные запуска (tgWebAppData).
+// VITE_APP_LINK позволяет указать ссылку вида https://t.me/<bot>/<app>.
+export function appLink() {
+  return import.meta.env.VITE_APP_LINK || window.location.origin + window.location.pathname;
 }
+
+// Лимит длины текста в ссылке t.me/share — режем с запасом
+const SHARE_TEXT_LIMIT = 1500;
+
+export function shareToTelegram(text) {
+  const url = appLink();
+  const body = text.length > SHARE_TEXT_LIMIT ? text.slice(0, SHARE_TEXT_LIMIT - 1).trimEnd() + '…' : text;
+  const link = 'https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(body);
+  if (isTelegram && tg.openTelegramLink) tg.openTelegramLink(link);
+  else if (navigator.share) navigator.share({ text: body, url }).catch(() => {});
+  else window.open(link, '_blank');
+}
+
+export const shareApp = shareToTelegram;

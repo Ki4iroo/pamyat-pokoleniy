@@ -5,7 +5,7 @@ import Avatar from '../components/Avatar';
 import { ShareIcon } from '../components/Icons';
 
 export default function SettingsScreen() {
-  const { t, lang, setLang, clearAll } = useStore();
+  const { t, lang, setLang, clearAll, setOnboarded } = useStore();
   const user = getTelegramUser();
   const fullName = user ? [user.first_name, user.last_name].filter(Boolean).join(' ') : t('guest');
 
@@ -43,6 +43,9 @@ export default function SettingsScreen() {
       <div className="settings-actions">
         <button className="btn btn--secondary btn--block" onClick={() => shareApp(t('shareText'))}>
           <ShareIcon /> {t('share')}
+        </button>
+        <button className="btn btn--secondary btn--block" onClick={() => setOnboarded(false)}>
+          {t('showOnboarding')}
         </button>
         <button className="btn btn--danger btn--block" onClick={handleClear}>{t('clearData')}</button>
       </div>

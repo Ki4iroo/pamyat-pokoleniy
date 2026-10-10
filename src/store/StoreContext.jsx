@@ -18,6 +18,8 @@ export function StoreProvider({ children }) {
   const [relatives, setRelatives] = usePersistentState('relatives', []);
   const [stories, setStories] = usePersistentState('stories', []);
   const [lang, setLang] = usePersistentState('lang', 'ru');
+  // У тех, кто уже добавлял родственников до появления онбординга, его не показываем
+  const [onboarded, setOnboarded] = usePersistentState('onboarded', load('relatives', []).length > 0);
 
   const addRelative = useCallback((data) => {
     const relative = { id: uid(), parentIds: [], ...data };
@@ -52,9 +54,9 @@ export function StoreProvider({ children }) {
   const t = useCallback((key) => translate(lang, key), [lang]);
 
   const value = useMemo(() => ({
-    relatives, stories, lang, setLang, t,
+    relatives, stories, lang, setLang, t, onboarded, setOnboarded,
     addRelative, updateRelative, removeRelative, addStory, removeStory, clearAll,
-  }), [relatives, stories, lang, setLang, t,
+  }), [relatives, stories, lang, setLang, t, onboarded, setOnboarded,
     addRelative, updateRelative, removeRelative, addStory, removeStory, clearAll]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;

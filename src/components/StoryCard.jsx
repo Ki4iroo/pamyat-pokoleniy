@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/StoreContext';
 import { formatDate } from '../lib/utils';
-import { tg } from '../lib/telegram';
+import { shareToTelegram, tg } from '../lib/telegram';
+import { ShareIcon } from './Icons';
 import Sheet from './Sheet';
 
 export default function StoryCard({ story, showRelative = true }) {
@@ -11,6 +12,11 @@ export default function StoryCard({ story, showRelative = true }) {
   const [open, setOpen] = useState(false);
   const relative = relatives.find((r) => r.id === story.relativeId);
   const date = formatDate(story.createdAt, lang);
+
+  const handleShare = () => {
+    const signature = relative ? `— ${relative.name}, ${t('sharedFrom')}` : `— ${t('sharedFrom')}`;
+    shareToTelegram(`«${story.title}»\n\n${story.text}\n\n${signature}`);
+  };
 
   const handleDelete = () => {
     const run = (ok) => {
@@ -47,7 +53,10 @@ export default function StoryCard({ story, showRelative = true }) {
             )}
           </div>
           <p className="story-full__text">{story.text}</p>
-          <button className="btn btn--danger btn--block" onClick={handleDelete}>{t('deleteStory')}</button>
+          <button className="btn btn--primary btn--block" onClick={handleShare}>
+            <ShareIcon /> {t('shareStory')}
+          </button>
+          <button className="btn btn--danger btn--block story-full__delete" onClick={handleDelete}>{t('deleteStory')}</button>
         </div>
       </Sheet>
     </>

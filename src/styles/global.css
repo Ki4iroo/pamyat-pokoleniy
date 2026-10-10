@@ -174,18 +174,31 @@ svg { flex-shrink: 0; }
   margin: 0 -16px; overflow: auto; -webkit-overflow-scrolling: touch;
   max-height: calc(100vh - 56px - var(--tabbar-h) - var(--safe-bottom) - 24px);
 }
-.tree-canvas { position: relative; margin: 0 auto; }
+.tree-sizer { position: relative; margin: 0 auto; }
+.tree-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; transition: transform .2s ease-out; }
 .tree-lines { position: absolute; inset: 0; pointer-events: none; }
-.tree-lines path { fill: none; stroke: var(--border); stroke-width: 2; stroke-linejoin: round; }
+.tree-lines path { fill: none; stroke: color-mix(in srgb, var(--accent) 35%, var(--border)); stroke-width: 2; stroke-linecap: round; }
 .tree-node {
-  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  padding: 6px 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  padding: 8px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
   transition: transform .1s, border-color .15s;
 }
 .tree-node:active { transform: scale(.95); border-color: var(--accent); }
+.tree-node__photo { display: block; padding: 2px; margin-bottom: 4px; border-radius: 50%; border: 2px solid var(--border); }
+.tree-node__photo--has { border-color: var(--accent); }
+.tree-node--past .tree-node__photo { border-color: var(--muted); }
+.tree-node--past .avatar img { filter: grayscale(.6); }
 .tree-node__name, .tree-node__rel { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-node__name { font-size: 13px; font-weight: 600; }
-.tree-node__rel { font-size: 11px; color: var(--muted); }
+.tree-node__rel { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tree-zoom {
+  position: fixed; z-index: 9; right: 16px; bottom: calc(var(--tabbar-h) + var(--safe-bottom) + 12px);
+  display: flex; align-items: center; gap: 2px; padding: 4px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px);
+  border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 6px 20px rgba(0, 0, 0, .4);
+}
+.tree-zoom .icon-btn:disabled { opacity: .3; }
+.tree-zoom__value { min-width: 44px; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* Chips */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -238,3 +251,30 @@ svg { flex-shrink: 0; }
 .photo-picker__actions { display: flex; gap: 16px; }
 .link-btn { color: var(--accent); font-size: 14px; font-weight: 500; padding: 0; }
 .link-btn--danger { color: var(--danger); }
+.story-full__delete { margin-top: 10px; }
+
+/* Onboarding */
+.onb {
+  display: flex; flex-direction: column; min-height: 100vh; max-width: 480px; margin: 0 auto;
+  padding: 12px 24px calc(24px + var(--safe-bottom));
+}
+.onb__top { height: 36px; display: flex; justify-content: flex-end; align-items: center; }
+.onb__skip { color: var(--muted); }
+.onb__slide {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 16px; animation: onb-in .3s ease-out;
+}
+.onb__art {
+  display: grid; place-items: center; width: 132px; height: 132px; margin-bottom: 12px; border-radius: 50%;
+  color: var(--accent);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.onb__art svg { width: 60px; height: 60px; stroke-width: 1.4; }
+.onb__title { font-size: 26px; font-weight: 700; line-height: 1.2; }
+.onb__text { color: #c9cdd6; font-size: 16px; line-height: 1.55; max-width: 320px; }
+.onb__bottom { display: flex; flex-direction: column; gap: 10px; }
+.onb__dots { display: flex; justify-content: center; gap: 8px; margin-bottom: 14px; }
+.onb__dot { width: 8px; height: 8px; border-radius: 4px; background: var(--border); transition: width .2s, background .2s; }
+.onb__dot--active { width: 24px; background: var(--accent); }
+@keyframes onb-in { from { opacity: 0; transform: translateY(12px); } }
