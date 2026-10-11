@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/StoreContext';
 import { transcribe, transcribeEnabled } from '../lib/transcribe';
+import { haptic } from '../lib/telegram';
 import { MicIcon, StopIcon } from './Icons';
 
 function pickMimeType() {
@@ -88,10 +89,54 @@ function VoiceButton({ onText }) {
   );
 }
 
+const GUIDE_STEPS = [1, 2, 3, 4, 5];
+
+// В guideStepN вопрос идёт после «Тема: » — берём его и делаем первую букву заглавной
+function guideQuestion(step) {
+  const question = step.split(': ').slice(1).join(': ') || step;
+  return question.charAt(0).toUpperCase() + question.slice(1);
+}
+
+// Карточки-вопросы: нажатие вставляет начало фразы в текст истории
+function StoryGuide({ onPick }) {
+  const { t } = useStore();
+  return (
+    <div className="guide">
+      <span className="guide__hint">{t('guideHint')}</span>
+      <div className="guide__cards">
+        {GUIDE_STEPS.map((n) => (
+          <button key={n} type="button" className="guide-card" onClick={() => onPick(t(`guideStart${n}`))}>
+            <span className="guide-card__title">{t(`guideTitle${n}`)}</span>
+            <span className="guide-card__text">{guideQuestion(t(`guideStep${n}`))}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function StoryForm({ defaultRelativeId = '', onSubmit, onCancel }) {
   const { t, relatives } = useStore();
   const [form, setForm] = useState({ title: '', text: '', relativeId: defaultRelativeId });
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const textRef = useRef(null);
+
+  // Пустое поле — начинаем с фразы; иначе добавляем её новым абзацем. Курсор ставим в конец.
+  const insertStarter = (starter) => {
+    const current = form.text;
+    const next = !current.trim() ? starter
+      : current.endsWith(starter) ? current
+        : current.replace(/\s+$/, '') + '\n\n' + starter;
+    setForm((f) => ({ ...f, text: next }));
+    haptic('light');
+    requestAnimationFrame(() => {
+      const el = textRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(next.length, next.length);
+      el.scrollTop = el.scrollHeight;
+    });
+  };
 
   const appendText = (text) =>
     setForm((f) => ({ ...f, text: f.text ? f.text + ' ' + text : text }));
@@ -117,9 +162,10 @@ export default function StoryForm({ defaultRelativeId = '', onSubmit, onCancel }
           </select>
         </label>
       )}
+      <StoryGuide onPick={insertStarter} />
       <label className="field">
         <span>{t('text')}</span>
-        <textarea rows={6} value={form.text} onChange={set('text')} required />
+        <textarea ref={textRef} rows={6} value={form.text} onChange={set('text')} required />
       </label>
       {transcribeEnabled && <VoiceButton onText={appendText} />}
       <div className="form__actions">

@@ -280,3 +280,24 @@ svg { flex-shrink: 0; }
 @keyframes onb-in { from { opacity: 0; transform: translateY(12px); } }
 .dictation { margin-top: -4px; }
 .dictation__note { margin-top: 6px; font-size: 15px; }
+
+/* Story guide */
+.guide { display: flex; flex-direction: column; gap: 8px; }
+.guide__hint { font-size: 15px; color: var(--muted); }
+.guide__cards {
+  display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 16px;
+  margin: 0 -16px; padding: 2px 16px 6px; scrollbar-width: none;
+}
+.guide__cards::-webkit-scrollbar { display: none; }
+.guide-card {
+  flex: 0 0 220px; display: flex; flex-direction: column; gap: 6px; padding: 12px 14px;
+  text-align: left; scroll-snap-align: start;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 14px;
+  transition: transform .1s, border-color .15s;
+}
+.guide-card:active { transform: scale(.97); border-color: var(--accent); }
+.guide-card__title { font-size: 15px; font-weight: 600; color: var(--accent); }
+.guide-card__text {
+  font-size: 15px; line-height: 1.35; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
