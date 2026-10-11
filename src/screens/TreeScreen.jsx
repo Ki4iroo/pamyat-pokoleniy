@@ -9,7 +9,7 @@ import EmptyState from '../components/EmptyState';
 import { MinusIcon, PlusIcon, TreeIcon } from '../components/Icons';
 
 const NODE_W = 104;
-const NODE_H = 124; // высота карточки узла, см. .tree-node в CSS
+const NODE_H = 140; // высота карточки узла, см. .tree-node в CSS
 const PAD = 20;
 const ZOOM_STEPS = [0.5, 0.65, 0.8, 1, 1.25];
 
