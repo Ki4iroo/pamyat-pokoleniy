@@ -42,3 +42,9 @@ export const CameraIcon = () => (
 export const MinusIcon = () => (
   <svg {...base}><path d="M5 12h14" /></svg>
 );
+export const PlayIcon = () => (
+  <svg {...base}><path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none" /></svg>
+);
+export const PauseIcon = () => (
+  <svg {...base}><rect x="6.5" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" /><rect x="13.5" y="5" width="4" height="14" rx="1" fill="currentColor" stroke="none" /></svg>
+);

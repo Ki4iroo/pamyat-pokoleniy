@@ -2,7 +2,6 @@ import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/StoreContext';
 import { getTelegramUser, haptic } from '../lib/telegram';
-import { transcribeEnabled } from '../lib/transcribe';
 import { MicIcon, TreeIcon, UsersIcon } from '../components/Icons';
 
 const slides = [
@@ -76,7 +75,7 @@ export default function Onboarding() {
         ) : (
           <button className="btn btn--primary btn--block" onClick={() => go(step + 1)}>{t('onbNext')}</button>
         )}
-        <p className="muted center">{t(transcribeEnabled ? 'onbPrivacyDictation' : 'onbPrivacy')}</p>
+        <p className="muted center">{t('onbPrivacy')}</p>
       </div>
     </div>
   );

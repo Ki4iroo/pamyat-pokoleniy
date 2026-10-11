@@ -103,11 +103,27 @@ export function StoreProvider({ children }) {
     setRelatives((list) => list.map((r) => (r.id === id ? { ...r, audioId: next.audioId, audioDuration: next.audioDuration } : r)));
   }, []);
 
-  const addStory = useCallback((data) => {
+  // Истории с аудио сохраняются до обновления интерфейса: запись нужно сначала положить в IndexedDB.
+  // Ошибки пробрасываются в форму, чтобы она могла их показать.
+  // audio: { blob, duration } или undefined
+  const addStory = useCallback(async (data, audio) => {
     const story = { id: uid(), createdAt: new Date().toISOString(), ...data };
-    setStories((list) => [story, ...list]);
-    persist(repo.saveStory(story));
-  }, [persist]);
+    const saved = await repo.saveStory(story, audio || undefined);
+    setStories((list) => [saved, ...list]);
+    return saved;
+  }, []);
+
+  // audio — заменить запись, removeAudio — убрать её
+  const updateStory = useCallback(async (id, patch, { audio, removeAudio } = {}) => {
+    const current = storiesRef.current.find((s) => s.id === id);
+    if (!current) return null;
+    let next = { ...current, ...patch };
+    if (audio) next = await repo.saveStory(next, audio);
+    else if (removeAudio) next = await repo.removeStoryAudio(next);
+    else await repo.saveStory(next);
+    setStories((list) => list.map((s) => (s.id === id ? next : s)));
+    return next;
+  }, []);
 
   const removeStory = useCallback((id) => {
     const story = storiesRef.current.find((s) => s.id === id);
@@ -127,10 +143,10 @@ export function StoreProvider({ children }) {
   const value = useMemo(() => ({
     relatives, stories, status, saveError, dismissSaveError: () => setSaveError(false),
     lang, setLang, t, onboarded, setOnboarded, reload,
-    addRelative, updateRelative, removeRelative, setGreeting, addStory, removeStory, clearAll,
+    addRelative, updateRelative, removeRelative, setGreeting, addStory, updateStory, removeStory, clearAll,
     loadAudio: repo.loadAudio,
   }), [relatives, stories, status, saveError, lang, setLang, t, onboarded, setOnboarded, reload,
-    addRelative, updateRelative, removeRelative, setGreeting, addStory, removeStory, clearAll]);
+    addRelative, updateRelative, removeRelative, setGreeting, addStory, updateStory, removeStory, clearAll]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

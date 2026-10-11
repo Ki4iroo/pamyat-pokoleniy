@@ -16,7 +16,7 @@ import { ChevronLeftIcon, EditIcon, PlusIcon } from '../components/Icons';
 export default function RelativeProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { relatives, stories, addStory, updateRelative, removeRelative, t, lang } = useStore();
+  const { relatives, stories, updateRelative, removeRelative, t, lang } = useStore();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
 
@@ -98,7 +98,7 @@ export default function RelativeProfile() {
       <Sheet open={adding} onClose={() => setAdding(false)} title={t('addStory')}>
         <StoryForm
           defaultRelativeId={id}
-          onSubmit={(data) => { addStory(data); haptic('medium'); setAdding(false); }}
+          onDone={() => setAdding(false)}
           onCancel={() => setAdding(false)}
         />
       </Sheet>

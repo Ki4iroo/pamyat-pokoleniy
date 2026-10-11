@@ -1,93 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/StoreContext';
-import { transcribe, transcribeEnabled } from '../lib/transcribe';
-import { haptic } from '../lib/telegram';
-import { MicIcon, StopIcon } from './Icons';
-
-function pickMimeType() {
-  if (typeof MediaRecorder === 'undefined') return null;
-  const types = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'];
-  return types.find((type) => MediaRecorder.isTypeSupported?.(type)) ?? '';
-}
-
-function VoiceButton({ onText }) {
-  const { t } = useStore();
-  const [state, setState] = useState('idle'); // idle | recording | uploading
-  const [error, setError] = useState('');
-  const recRef = useRef(null);
-  const mountedRef = useRef(true);
-
-  useEffect(() => () => {
-    mountedRef.current = false;
-    if (recRef.current?.state === 'recording') {
-      recRef.current.onstop = null;
-      recRef.current.stop();
-    }
-    recRef.current?.stream.getTracks().forEach((tr) => tr.stop());
-  }, []);
-
-  const start = async () => {
-    setError('');
-    const mimeType = pickMimeType();
-    if (mimeType === null || !navigator.mediaDevices?.getUserMedia) {
-      setError(t('audioUnsupported'));
-      return;
-    }
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      setError(t('micDenied'));
-      return;
-    }
-
-    const recorder = new MediaRecorder(stream, { ...(mimeType && { mimeType }), audioBitsPerSecond: 32000 });
-    const chunks = [];
-    recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-    recorder.onstop = async () => {
-      stream.getTracks().forEach((tr) => tr.stop());
-      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
-      try {
-        const text = await transcribe(blob);
-        if (!mountedRef.current) return;
-        if (text) onText(text);
-        else setError(t('dictationEmpty'));
-      } catch {
-        if (mountedRef.current) setError(t('dictationFailed'));
-      }
-      if (mountedRef.current) setState('idle');
-    };
-
-    recRef.current = recorder;
-    recorder.start();
-    setState('recording');
-  };
-
-  const stop = () => {
-    if (recRef.current?.state === 'recording') recRef.current.stop();
-    setState('uploading');
-  };
-
-  return (
-    <div className="recorder dictation">
-      {state === 'recording' && (
-        <button type="button" className="btn btn--recording btn--block" onClick={stop}>
-          <span className="rec-dot" /><StopIcon /> {t('dictationStop')}
-        </button>
-      )}
-      {state === 'uploading' && (
-        <button type="button" className="btn btn--secondary btn--block" disabled>{t('dictationBusy')}</button>
-      )}
-      {state === 'idle' && (
-        <button type="button" className="btn btn--secondary btn--block" onClick={start}>
-          <MicIcon /> {t('dictate')}
-        </button>
-      )}
-      <p className="muted dictation__note">{t('dictationNote')}</p>
-      {error && <p className="recorder__error">{error}</p>}
-    </div>
-  );
-}
+import { repo } from '../data';
+import useRecorder from '../lib/useRecorder';
+import { formatDate, formatDuration } from '../lib/utils';
+import { confirmAction, haptic } from '../lib/telegram';
+import RecorderPanel from './RecorderPanel';
+import AudioPlayer from './AudioPlayer';
+import { TrashIcon } from './Icons';
 
 const GUIDE_STEPS = [1, 2, 3, 4, 5];
 
@@ -115,11 +34,86 @@ function StoryGuide({ onPick }) {
   );
 }
 
-export default function StoryForm({ defaultRelativeId = '', onSubmit, onCancel }) {
-  const { t, relatives } = useStore();
-  const [form, setForm] = useState({ title: '', text: '', relativeId: defaultRelativeId });
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+// Незаконченная запись, оставшаяся в черновиках (например, если Telegram закрыли посреди записи)
+function DraftBanner({ draft, onRestore, onDiscard }) {
+  const { t } = useStore();
+  return (
+    <div className="draft-banner">
+      <span>{t('draftFound').replace('{time}', formatDuration(draft.duration))}</span>
+      <div className="draft-banner__actions">
+        <button type="button" className="link-btn" onClick={onRestore}>{t('draftRestore')}</button>
+        <button type="button" className="link-btn link-btn--danger" onClick={onDiscard}>{t('delete')}</button>
+      </div>
+    </div>
+  );
+}
+
+// Форма новой истории или редактирования существующей (story).
+// Запись голоса — основной способ; заголовок и текст обязательны только без записи.
+export default function StoryForm({ story, defaultRelativeId = '', onDone, onCancel }) {
+  const { t, lang, relatives, addStory, updateStory } = useStore();
+  const rec = useRecorder();
+  const editing = Boolean(story);
+  const [form, setForm] = useState({
+    title: story?.title ?? '',
+    text: story?.text ?? '',
+    relativeId: story?.relativeId ?? defaultRelativeId,
+  });
+  const [audio, setAudio] = useState(null); // новая запись: { blob, duration, draftId }
+  const [removeExisting, setRemoveExisting] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
   const textRef = useRef(null);
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const existingAudio = editing && story.audioId && !removeExisting;
+  const hasAudio = Boolean(audio) || existingAudio;
+
+  // Ищем незаконченную запись только для новой истории
+  useEffect(() => {
+    if (editing) return undefined;
+    let cancelled = false;
+    repo.listDrafts().then(async (drafts) => {
+      const usable = [];
+      for (const d of drafts) {
+        if (d.blob.size) usable.push(d);
+        else await repo.discardDraft(d.draftId).catch(() => {});
+      }
+      usable.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+      if (!cancelled && usable[0]) setDraft(usable[0]);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [editing]);
+
+  const restoreDraft = () => {
+    setAudio({ blob: draft.blob, duration: draft.duration, draftId: draft.draftId });
+    if (!form.relativeId && draft.relativeId) setForm((f) => ({ ...f, relativeId: draft.relativeId }));
+    setDraft(null);
+  };
+
+  const discardDraft = async () => {
+    await repo.discardDraft(draft.draftId).catch(() => {});
+    setDraft(null);
+  };
+
+  const onRecorded = async (result) => {
+    // Запись поверх предыдущей несохранённой — старый черновик больше не нужен
+    if (audio?.draftId) repo.discardDraft(audio.draftId).catch(() => {});
+    if (draft) setDraft(null);
+    setAudio(result);
+    setError('');
+  };
+
+  const removeAudio = async () => {
+    if (!(await confirmAction(t('confirmDeleteRecording')))) return;
+    if (audio) {
+      if (audio.draftId) repo.discardDraft(audio.draftId).catch(() => {});
+      setAudio(null);
+    } else if (existingAudio) {
+      setRemoveExisting(true);
+    }
+  };
 
   // Пустое поле — начинаем с фразы; иначе добавляем её новым абзацем. Курсор ставим в конец.
   const insertStarter = (starter) => {
@@ -138,20 +132,71 @@ export default function StoryForm({ defaultRelativeId = '', onSubmit, onCancel }
     });
   };
 
-  const appendText = (text) =>
-    setForm((f) => ({ ...f, text: f.text ? f.text + ' ' + text : text }));
-
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (!form.title.trim() || !form.text.trim()) return;
-    onSubmit({ ...form, title: form.title.trim(), text: form.text.trim() });
+    if (rec.active || saving) return;
+    const title = form.title.trim();
+    const text = form.text.trim();
+    if (!hasAudio && (!title || !text)) {
+      setError(t('storyNeedsContent'));
+      return;
+    }
+    const data = {
+      relativeId: form.relativeId,
+      text,
+      // Без заголовка у записи — «Запись от 11 октября 2026 г.»
+      title: title || t('autoTitle').replace('{date}', formatDate(story?.createdAt || new Date().toISOString(), lang)),
+    };
+    const newAudio = audio ? { blob: audio.blob, duration: audio.duration } : undefined;
+
+    setSaving(true);
+    setError('');
+    try {
+      if (editing) await updateStory(story.id, data, { audio: newAudio, removeAudio: removeExisting && !audio });
+      else await addStory(data, newAudio);
+      if (audio?.draftId) repo.discardDraft(audio.draftId).catch(() => {});
+      haptic('medium');
+      onDone?.();
+    } catch (err) {
+      console.error('Story save failed', err);
+      setError(t('saveFailed'));
+      setSaving(false);
+    }
+  };
+
+  const cancel = async () => {
+    if (rec.active) await rec.cancel();
+    if (audio) {
+      if (!(await confirmAction(t('confirmDiscardRecording')))) return;
+      if (audio.draftId) repo.discardDraft(audio.draftId).catch(() => {});
+    }
+    onCancel();
   };
 
   return (
     <form className="form" onSubmit={submit}>
+      {draft && !audio && <DraftBanner draft={draft} onRestore={restoreDraft} onDiscard={discardDraft} />}
+
+      {/* Голос — основной способ рассказать историю */}
+      {hasAudio && !rec.active ? (
+        <div className="story-audio">
+          {audio
+            ? <AudioPlayer blob={audio.blob} duration={audio.duration} />
+            : <AudioPlayer audioId={story.audioId} duration={story.audioDuration} />}
+          <div className="story-audio__actions">
+            <RecorderPanel rec={rec} relativeId={form.relativeId} onRecorded={onRecorded} label={t('rerecord')} />
+            <button type="button" className="icon-btn icon-btn--danger" onClick={removeAudio} aria-label={t('deleteRecording')}>
+              <TrashIcon />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <RecorderPanel rec={rec} relativeId={form.relativeId} onRecorded={onRecorded} />
+      )}
+
       <label className="field">
-        <span>{t('title')}</span>
-        <input value={form.title} onChange={set('title')} autoFocus required />
+        <span>{t('title')}{hasAudio && <em className="field__optional"> · {t('optional')}</em>}</span>
+        <input value={form.title} onChange={set('title')} placeholder={hasAudio ? t('autoTitleHint') : ''} />
       </label>
       {!defaultRelativeId && relatives.length > 0 && (
         <label className="field">
@@ -164,13 +209,18 @@ export default function StoryForm({ defaultRelativeId = '', onSubmit, onCancel }
       )}
       <StoryGuide onPick={insertStarter} />
       <label className="field">
-        <span>{t('text')}</span>
-        <textarea ref={textRef} rows={6} value={form.text} onChange={set('text')} required />
+        <span>{t('text')}{hasAudio && <em className="field__optional"> · {t('optional')}</em>}</span>
+        <textarea ref={textRef} rows={5} value={form.text} onChange={set('text')} />
       </label>
-      {transcribeEnabled && <VoiceButton onText={appendText} />}
+
+      {error && <p className="recorder__error">{error}</p>}
+      {rec.active && <p className="muted">{t('finishRecordingFirst')}</p>}
+
       <div className="form__actions">
-        <button type="button" className="btn btn--ghost" onClick={onCancel}>{t('cancel')}</button>
-        <button type="submit" className="btn btn--primary">{t('save')}</button>
+        <button type="button" className="btn btn--ghost" onClick={cancel} disabled={saving}>{t('cancel')}</button>
+        <button type="submit" className="btn btn--primary" disabled={rec.active || saving}>
+          {saving ? t('saving') : t('save')}
+        </button>
       </div>
     </form>
   );

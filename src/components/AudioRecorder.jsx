@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/StoreContext';
 import { confirmAction, haptic } from '../lib/telegram';
-import useAudioUrl from '../hooks/useAudioUrl';
+import AudioPlayer from './AudioPlayer';
 import { MicIcon, StopIcon, TrashIcon } from './Icons';
 
 const MAX_SECONDS = 60;
@@ -16,7 +16,6 @@ const formatTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).pa
 
 export default function AudioRecorder({ relative }) {
   const { t, setGreeting } = useStore();
-  const audioUrl = useAudioUrl(relative.audioId);
   const [recording, setRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -121,7 +120,7 @@ export default function AudioRecorder({ relative }) {
     <div className="recorder">
       {relative.audioId ? (
         <div className="recorder__player">
-          {audioUrl ? <audio controls preload="metadata" src={audioUrl} /> : <div className="recorder__placeholder" />}
+          <AudioPlayer audioId={relative.audioId} duration={relative.audioDuration} />
           <div className="recorder__actions">
             <button className="btn btn--secondary" onClick={start}><MicIcon /> {t('rerecord')}</button>
             <button className="icon-btn icon-btn--danger" onClick={remove} aria-label={t('delete')}>

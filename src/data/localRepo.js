@@ -112,6 +112,15 @@ async function saveStory(story, audio) {
   return next;
 }
 
+async function removeStoryAudio(story) {
+  const next = { ...story, audioId: null, audioDuration: null };
+  await withStores(['stories', 'blobs'], 'readwrite', (s) => {
+    if (story.audioId) s.blobs.delete(story.audioId);
+    s.stories.put(next);
+  });
+  return next;
+}
+
 async function deleteStory(story) {
   await withStores(['stories', 'blobs'], 'readwrite', (s) => {
     if (story.audioId) s.blobs.delete(story.audioId);
@@ -178,4 +187,4 @@ async function estimate() {
   catch { return null; }
 }
 
-export const localRepo = { init, loadAll, saveRelative, deleteRelative, setGreeting, saveStory, deleteStory, loadAudio, clearAll, appendDraftChunk, discardDraft, listDrafts, loadAllBlobs, importRecords, estimate };
+export const localRepo = { init, loadAll, saveRelative, deleteRelative, setGreeting, saveStory, removeStoryAudio, deleteStory, loadAudio, clearAll, appendDraftChunk, discardDraft, listDrafts, loadAllBlobs, importRecords, estimate };

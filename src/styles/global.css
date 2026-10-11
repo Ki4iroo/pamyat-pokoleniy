@@ -251,7 +251,6 @@ svg { flex-shrink: 0; }
 .photo-picker__actions { display: flex; gap: 16px; }
 .link-btn { color: var(--accent); font-size: 15px; font-weight: 500; padding: 0; }
 .link-btn--danger { color: var(--danger); }
-.story-full__delete { margin-top: 10px; }
 
 /* Onboarding */
 .onb {
@@ -278,8 +277,6 @@ svg { flex-shrink: 0; }
 .onb__dot { width: 8px; height: 8px; border-radius: 4px; background: var(--border); transition: width .2s, background .2s; }
 .onb__dot--active { width: 24px; background: var(--accent); }
 @keyframes onb-in { from { opacity: 0; transform: translateY(12px); } }
-.dictation { margin-top: -4px; }
-.dictation__note { margin-top: 6px; font-size: 15px; }
 
 /* Story guide */
 .guide { display: flex; flex-direction: column; gap: 8px; }
@@ -314,5 +311,64 @@ svg { flex-shrink: 0; }
 }
 .settings-data { display: flex; flex-direction: column; gap: 10px; }
 .settings-data p { font-size: 15px; }
-.recorder__placeholder { height: 44px; border-radius: 22px; background: var(--surface-2); }
-.story-full__audio { width: 100%; margin-bottom: 16px; }
+
+/* Recorder panel */
+.rec-panel { display: flex; flex-direction: column; gap: 10px; }
+.rec-panel__start { height: 56px; }
+.rec-panel--active {
+  padding: 14px; border-radius: 16px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.rec-panel--paused { background: var(--bg); border-color: var(--border); }
+.rec-panel__top { display: flex; align-items: center; justify-content: space-between; }
+.rec-panel__state { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; color: var(--muted); }
+.rec-panel__time { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rec-panel__meter { display: flex; align-items: center; gap: 3px; height: 40px; }
+.rec-panel__meter span {
+  flex: 1; height: 100%; border-radius: 2px; background: var(--accent);
+  transform-origin: center; transition: transform .08s linear;
+}
+.rec-panel--paused .rec-panel__meter span { background: var(--border); }
+.rec-panel__actions { display: flex; gap: 10px; align-items: center; }
+.rec-panel__pause { flex: 1; }
+.rec-panel__done { flex: 1; }
+
+/* Audio player */
+.player {
+  display: flex; align-items: center; gap: 12px; padding: 8px 12px 8px 8px;
+  border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border);
+}
+.player__btn {
+  display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text);
+}
+.player__btn:disabled { opacity: .4; }
+.player__btn svg { width: 18px; height: 18px; }
+.player__range {
+  flex: 1; min-width: 0; height: 4px; appearance: none; -webkit-appearance: none; border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) var(--progress), var(--border) var(--progress));
+}
+.player__range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--text); }
+.player__range::-moz-range-thumb { width: 14px; height: 14px; border: 0; border-radius: 50%; background: var(--text); }
+.player__time { min-width: 44px; text-align: right; font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.player audio { display: none; }
+
+/* Story form audio */
+.story-audio { display: flex; flex-direction: column; gap: 10px; }
+.story-audio__actions { display: flex; gap: 10px; align-items: flex-start; }
+.story-audio__actions .rec-panel { flex: 1; }
+.story-audio__actions .rec-panel__start { height: 48px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.story-audio__actions .icon-btn { flex-shrink: 0; }
+.field__optional { font-style: normal; color: var(--muted); opacity: .8; }
+.draft-banner {
+  display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; font-size: 15px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.draft-banner__actions { display: flex; gap: 20px; }
+.story__audio-badge { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); }
+.story__audio-badge svg { width: 15px; height: 15px; }
+.story-full__audio { margin-bottom: 16px; }
+.story-full__actions { display: flex; flex-direction: column; gap: 10px; }
+.recorder__player .player { margin-bottom: 0; }
