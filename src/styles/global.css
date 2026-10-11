@@ -301,3 +301,18 @@ svg { flex-shrink: 0; }
   font-size: 15px; line-height: 1.35; color: var(--muted);
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
+
+/* Storage status */
+.app-status {
+  display: grid; place-items: center; min-height: 100vh; padding: 24px;
+  text-align: center; color: var(--muted);
+}
+.save-error {
+  position: sticky; top: 0; z-index: 30; display: block; width: 100%; padding: 10px 16px;
+  font-size: 15px; color: var(--text); text-align: center;
+  background: color-mix(in srgb, var(--danger) 30%, var(--surface));
+}
+.settings-data { display: flex; flex-direction: column; gap: 10px; }
+.settings-data p { font-size: 15px; }
+.recorder__placeholder { height: 44px; border-radius: 22px; background: var(--surface-2); }
+.story-full__audio { width: 100%; margin-bottom: 16px; }

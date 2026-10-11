@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/StoreContext';
-import { haptic, tg } from '../lib/telegram';
+import { confirmAction, haptic } from '../lib/telegram';
+import useAudioUrl from '../hooks/useAudioUrl';
 import { MicIcon, StopIcon, TrashIcon } from './Icons';
 
 const MAX_SECONDS = 60;
-// Запись хранится в localStorage как data URL, поэтому держим её маленькой
-const MAX_DATA_URL_LENGTH = 1_500_000;
 
 function pickMimeType() {
   if (typeof MediaRecorder === 'undefined') return null;
@@ -15,18 +14,11 @@ function pickMimeType() {
 
 const formatTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
-function blobToDataUrl(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
 export default function AudioRecorder({ relative }) {
-  const { t, updateRelative } = useStore();
+  const { t, setGreeting } = useStore();
+  const audioUrl = useAudioUrl(relative.audioId);
   const [recording, setRecording] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState('');
   const recorderRef = useRef(null);
@@ -71,16 +63,15 @@ export default function AudioRecorder({ relative }) {
     recorder.onstop = async () => {
       stopTracks();
       const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || 'audio/webm' });
-      const dataUrl = await blobToDataUrl(blob);
-      if (dataUrl.length > MAX_DATA_URL_LENGTH) {
-        setError(t('audioTooLarge'));
-        return;
+      setSaving(true);
+      try {
+        await setGreeting(relative.id, { blob, duration: Math.round((Date.now() - startedAt) / 1000) });
+        haptic('medium');
+      } catch {
+        setError(t('saveFailed'));
+      } finally {
+        setSaving(false);
       }
-      updateRelative(relative.id, {
-        audio: dataUrl,
-        audioDuration: Math.round((Date.now() - startedAt) / 1000),
-      });
-      haptic('medium');
     };
 
     recorderRef.current = recorder;
@@ -102,10 +93,9 @@ export default function AudioRecorder({ relative }) {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
   };
 
-  const remove = () => {
-    const run = (ok) => ok && updateRelative(relative.id, { audio: null, audioDuration: null });
-    if (tg?.showConfirm) tg.showConfirm(t('confirmDeleteAudio'), run);
-    else run(window.confirm(t('confirmDeleteAudio')));
+  const remove = async () => {
+    if (!(await confirmAction(t('confirmDeleteAudio')))) return;
+    setGreeting(relative.id, null).catch(() => setError(t('saveFailed')));
   };
 
   if (recording) {
@@ -119,11 +109,19 @@ export default function AudioRecorder({ relative }) {
     );
   }
 
+  if (saving) {
+    return (
+      <div className="recorder">
+        <button className="btn btn--secondary btn--block" disabled>{t('saving')}</button>
+      </div>
+    );
+  }
+
   return (
     <div className="recorder">
-      {relative.audio ? (
+      {relative.audioId ? (
         <div className="recorder__player">
-          <audio controls preload="metadata" src={relative.audio} />
+          {audioUrl ? <audio controls preload="metadata" src={audioUrl} /> : <div className="recorder__placeholder" />}
           <div className="recorder__actions">
             <button className="btn btn--secondary" onClick={start}><MicIcon /> {t('rerecord')}</button>
             <button className="icon-btn icon-btn--danger" onClick={remove} aria-label={t('delete')}>

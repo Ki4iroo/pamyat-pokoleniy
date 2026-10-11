@@ -53,3 +53,19 @@ export function shareToTelegram(text) {
 }
 
 export const shareApp = shareToTelegram;
+
+// Подтверждение действия. Нативный диалог Telegram есть только внутри Telegram с версии 6.2;
+// вне Telegram tg.showConfirm тоже существует, но выбрасывает WebAppMethodUnsupported.
+export function confirmAction(text) {
+  return new Promise((resolve) => {
+    if (isTelegram && tg.isVersionAtLeast?.('6.2')) {
+      try {
+        tg.showConfirm(text, (ok) => resolve(Boolean(ok)));
+        return;
+      } catch {
+        // упадём на обычный confirm ниже
+      }
+    }
+    resolve(window.confirm(text));
+  });
+}

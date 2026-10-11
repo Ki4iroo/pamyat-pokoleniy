@@ -1,18 +1,67 @@
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/StoreContext';
-import { getTelegramUser, shareApp, tg } from '../lib/telegram';
+import { repo } from '../data';
+import { buildArchive, readArchive, saveFile } from '../data/archive';
+import { confirmAction, getTelegramUser, shareApp } from '../lib/telegram';
 import Header from '../components/Header';
 import Avatar from '../components/Avatar';
 import { ShareIcon } from '../components/Icons';
 
 export default function SettingsScreen() {
-  const { t, lang, setLang, clearAll, setOnboarded } = useStore();
+  const { t, lang, setLang, clearAll, setOnboarded, reload, relatives, stories } = useStore();
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(''); // '' | 'export' | 'import'
+  const [message, setMessage] = useState(null); // { text, error }
+  const [usage, setUsage] = useState(null);
+
+  // Сколько места занято на устройстве — обновляем при изменении данных
+  useEffect(() => {
+    let cancelled = false;
+    repo.estimate().then((e) => !cancelled && setUsage(e));
+    return () => { cancelled = true; };
+  }, [relatives, stories]);
+
+  const handleExport = async () => {
+    setBusy('export');
+    setMessage(null);
+    try {
+      const { blob, filename, counts } = await buildArchive();
+      const result = await saveFile(blob, filename);
+      if (result !== 'cancelled') {
+        setMessage({ text: fill(t('exportDone'), { r: counts.relatives, s: counts.stories }) });
+      }
+    } catch (e) {
+      console.error('Export failed', e);
+      setMessage({ text: t('exportFailed'), error: true });
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // чтобы можно было выбрать тот же файл ещё раз
+    if (!file || !(await confirmAction(t('importConfirm')))) return;
+    setBusy('import');
+    setMessage(null);
+    try {
+      const records = await readArchive(file);
+      await repo.importRecords(records);
+      await reload();
+      setMessage({ text: fill(t('importDone'), { r: records.relatives.length, s: records.stories.length }) });
+    } catch (err) {
+      console.error('Import failed', err);
+      setMessage({ text: t(err?.message === 'bad-archive' ? 'importBad' : 'importFailed'), error: true });
+    } finally {
+      setBusy('');
+    }
+  };
+
   const user = getTelegramUser();
   const fullName = user ? [user.first_name, user.last_name].filter(Boolean).join(' ') : t('guest');
 
-  const handleClear = () => {
-    const run = (ok) => ok && clearAll();
-    if (tg?.showConfirm) tg.showConfirm(t('confirmClear'), run);
-    else run(window.confirm(t('confirmClear')));
+  const handleClear = async () => {
+    if (await confirmAction(t('confirmClear'))) clearAll();
   };
 
   return (
@@ -40,6 +89,19 @@ export default function SettingsScreen() {
         ))}
       </div>
 
+      <div className="section-title"><span>{t('dataSection')}</span></div>
+      <div className="settings-data">
+        <button className="btn btn--secondary btn--block" onClick={handleExport} disabled={!!busy}>
+          {busy === 'export' ? t('exporting') : t('exportData')}
+        </button>
+        <button className="btn btn--secondary btn--block" onClick={() => fileRef.current?.click()} disabled={!!busy}>
+          {busy === 'import' ? t('importing') : t('importData')}
+        </button>
+        <input ref={fileRef} type="file" accept=".zip,application/zip" hidden onChange={handleImportFile} />
+        {message && <p className={message.error ? 'recorder__error' : 'muted'}>{message.text}</p>}
+        {usage && <p className="muted">{fill(t('storageUsed'), { size: formatBytes(usage.usage, lang) })}</p>}
+      </div>
+
       <div className="settings-actions">
         <button className="btn btn--secondary btn--block" onClick={() => shareApp(t('shareText'))}>
           <ShareIcon /> {t('share')}
@@ -51,4 +113,12 @@ export default function SettingsScreen() {
       </div>
     </>
   );
+}
+
+const fill = (text, values) => text.replace(/\{(\w+)\}/g, (_, k) => values[k] ?? '');
+
+function formatBytes(bytes, lang) {
+  const [kb, mb] = lang === 'ru' ? ['КБ', 'МБ'] : ['KB', 'MB'];
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} ${kb}`;
+  return `${(bytes / 1024 / 1024).toFixed(1).replace('.', lang === 'ru' ? ',' : '.')} ${mb}`;
 }

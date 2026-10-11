@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/StoreContext';
 import { formatDate } from '../lib/utils';
-import { shareToTelegram, tg } from '../lib/telegram';
+import { confirmAction, shareToTelegram } from '../lib/telegram';
 import { ShareIcon } from './Icons';
 import Sheet from './Sheet';
+import useAudioUrl from '../hooks/useAudioUrl';
 
 export default function StoryCard({ story, showRelative = true }) {
   const { relatives, lang, t, removeStory } = useStore();
@@ -18,14 +19,10 @@ export default function StoryCard({ story, showRelative = true }) {
     shareToTelegram(`«${story.title}»\n\n${story.text}\n\n${signature}`);
   };
 
-  const handleDelete = () => {
-    const run = (ok) => {
-      if (!ok) return;
-      setOpen(false);
-      removeStory(story.id);
-    };
-    if (tg?.showConfirm) tg.showConfirm(t('confirmDeleteStory'), run);
-    else run(window.confirm(t('confirmDeleteStory')));
+  const handleDelete = async () => {
+    if (!(await confirmAction(t('confirmDeleteStory')))) return;
+    setOpen(false);
+    removeStory(story.id);
   };
 
   return (
@@ -52,6 +49,7 @@ export default function StoryCard({ story, showRelative = true }) {
               </>
             )}
           </div>
+          {open && story.audioId && <StoryAudio audioId={story.audioId} />}
           <p className="story-full__text">{story.text}</p>
           <button className="btn btn--primary btn--block" onClick={handleShare}>
             <ShareIcon /> {t('shareStory')}
@@ -61,4 +59,10 @@ export default function StoryCard({ story, showRelative = true }) {
       </Sheet>
     </>
   );
+}
+
+// Отдельный компонент, чтобы запись загружалась только когда история открыта
+function StoryAudio({ audioId }) {
+  const url = useAudioUrl(audioId);
+  return url ? <audio className="story-full__audio" controls preload="metadata" src={url} /> : null;
 }

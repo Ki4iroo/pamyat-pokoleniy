@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../store/StoreContext';
 import { calcAge, formatDate, pluralYears } from '../lib/utils';
-import { haptic, isTelegram, showBackButton, tg } from '../lib/telegram';
+import { confirmAction, haptic, isTelegram, showBackButton } from '../lib/telegram';
 import Header from '../components/Header';
 import Avatar from '../components/Avatar';
 import Sheet from '../components/Sheet';
@@ -42,15 +42,11 @@ export default function RelativeProfile() {
   const parents = relatives.filter((r) => relative.parentIds?.includes(r.id));
   const children = relatives.filter((r) => r.parentIds?.includes(relative.id));
 
-  const handleDelete = () => {
-    const run = (ok) => {
-      if (!ok) return;
-      setEditing(false);
-      removeRelative(relative.id);
-      goBack();
-    };
-    if (tg?.showConfirm) tg.showConfirm(t('confirmDeleteRelative'), run);
-    else run(window.confirm(t('confirmDeleteRelative')));
+  const handleDelete = async () => {
+    if (!(await confirmAction(t('confirmDeleteRelative')))) return;
+    setEditing(false);
+    removeRelative(relative.id);
+    goBack();
   };
 
   return (
