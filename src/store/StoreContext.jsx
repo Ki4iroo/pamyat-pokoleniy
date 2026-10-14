@@ -3,12 +3,18 @@ import { load, save } from '../lib/storage';
 import { translate } from '../lib/i18n';
 import { uid } from '../lib/utils';
 import { repo } from '../data';
+import { apiEnabled, apiFetch } from '../lib/api';
+import { deleteCloudData, restoreFromCloud, syncToCloud } from '../data/cloud';
+
+const PAID_PLANS = ['paid', 'svo'];
+const SYNC_DELAY_MS = 3000;
 
 // Модель данных (хранится в IndexedDB через repo):
 // relative: { id, name, relation, birthDate, deathDate, photo, audioId, audioDuration, parentIds: [] }
 // story:    { id, relativeId, title, text, createdAt, audioId?, audioDuration? }
 // Аудио лежит отдельно, по audioId: repo.loadAudio(id) → Blob.
-// Настройки (язык, онбординг) остаются в localStorage.
+// Настройки (язык, онбординг, место хранения) остаются в localStorage.
+// storageMode: 'device' — только на устройстве; 'server' — ещё и копия на сервере (платно или тариф СВО).
 const StoreContext = createContext(null);
 
 // repo.init переносит старые данные из localStorage; второй параллельный запуск
@@ -35,6 +41,12 @@ export function StoreProvider({ children }) {
   // У тех, кто уже добавлял родственников до появления онбординга, его не показываем.
   // Читается до переноса: после него pp:relatives из localStorage удаляется.
   const [onboarded, setOnboarded] = usePersistentState('onboarded', load('relatives', []).length > 0);
+  const [storageMode, setStorageMode] = usePersistentState('storageMode', 'device');
+  // Тариф с сервера: { plan: 'free' | 'paid' | 'svo', consent, svo, priceStars } или null, пока не загружен
+  const [account, setAccount] = useState(null);
+  // state: idle | syncing | done | error | needsRestore
+  const [sync, setSync] = useState(() => ({ state: 'idle', at: load('lastSyncAt', null) }));
+  const syncingRef = useRef(false);
 
   // Актуальные списки для действий, которым нужно текущее значение вне setState
   const relativesRef = useRef(relatives);
@@ -62,6 +74,50 @@ export function StoreProvider({ children }) {
       }
     })();
     return () => { cancelled = true; };
+  }, [reload]);
+
+  const refreshAccount = useCallback(async () => {
+    if (!apiEnabled) return null;
+    const next = await apiFetch('/api/me');
+    setAccount(next);
+    return next;
+  }, []);
+
+  useEffect(() => { refreshAccount().catch((e) => console.warn('Account load failed', e)); }, [refreshAccount]);
+
+  const hasBackupPlan = Boolean(account && PAID_PLANS.includes(account.plan));
+  const cloudOn = apiEnabled && storageMode === 'server' && hasBackupPlan && Boolean(account?.consent);
+
+  const syncNow = useCallback(async () => {
+    if (syncingRef.current) return;
+    syncingRef.current = true;
+    setSync((s) => ({ ...s, state: 'syncing' }));
+    try {
+      const { needsRestore } = await syncToCloud();
+      if (needsRestore) { setSync((s) => ({ ...s, state: 'needsRestore' })); return; }
+      const at = new Date().toISOString();
+      save('lastSyncAt', at);
+      setSync({ state: 'done', at });
+    } catch (e) {
+      console.error('Sync failed', e);
+      setSync((s) => ({ ...s, state: 'error' }));
+    } finally {
+      syncingRef.current = false;
+    }
+  }, []);
+
+  // Копия на сервер уходит через несколько секунд после любого изменения
+  useEffect(() => {
+    if (!cloudOn || status !== 'ready') return undefined;
+    const timer = setTimeout(syncNow, SYNC_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [cloudOn, status, relatives, stories, syncNow]);
+
+  const restoreCloud = useCallback(async () => {
+    const counts = await restoreFromCloud();
+    await reload();
+    setSync((s) => ({ ...s, state: 'idle' }));
+    return counts;
   }, [reload]);
 
   // Интерфейс обновляется сразу, запись в IndexedDB идёт следом.
@@ -136,7 +192,8 @@ export function StoreProvider({ children }) {
     setRelatives([]);
     setStories([]);
     persist(repo.clearAll());
-  }, [persist]);
+    if (cloudOn) deleteCloudData().catch((e) => console.error('Cloud delete failed', e));
+  }, [persist, cloudOn]);
 
   const t = useCallback((key) => translate(lang, key), [lang]);
 
@@ -145,8 +202,10 @@ export function StoreProvider({ children }) {
     lang, setLang, t, onboarded, setOnboarded, reload,
     addRelative, updateRelative, removeRelative, setGreeting, addStory, updateStory, removeStory, clearAll,
     loadAudio: repo.loadAudio,
+    storageMode, setStorageMode, account, refreshAccount, hasBackupPlan, cloudOn, sync, syncNow, restoreCloud,
   }), [relatives, stories, status, saveError, lang, setLang, t, onboarded, setOnboarded, reload,
-    addRelative, updateRelative, removeRelative, setGreeting, addStory, updateStory, removeStory, clearAll]);
+    addRelative, updateRelative, removeRelative, setGreeting, addStory, updateStory, removeStory, clearAll,
+    storageMode, setStorageMode, account, refreshAccount, hasBackupPlan, cloudOn, sync, syncNow, restoreCloud]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

@@ -117,6 +117,7 @@ svg { flex-shrink: 0; }
   transition: transform .1s, opacity .15s;
 }
 .btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .5; }
 .btn svg { width: 20px; height: 20px; }
 .btn--block { width: 100%; }
 .btn--primary { background: var(--accent); color: var(--accent-text); }
@@ -372,3 +373,27 @@ svg { flex-shrink: 0; }
 .story-full__audio { margin-bottom: 16px; }
 .story-full__actions { display: flex; flex-direction: column; gap: 10px; }
 .recorder__player .player { margin-bottom: 0; }
+
+/* Тариф и хранение */
+.plan__lead { font-size: 16px; line-height: 1.55; margin-bottom: 20px; }
+.plan__points { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.plan__points li { position: relative; padding-left: 26px; font-size: 16px; line-height: 1.45; }
+.plan__points li::before { content: ''; position: absolute; left: 4px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.plan__actions { display: flex; flex-direction: column; gap: 12px; }
+.plan__pay { height: 54px; font-size: 17px; }
+.plan__svo { align-self: center; text-align: center; padding: 6px 0; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; color: var(--muted); line-height: 1.4; }
+.check input { flex-shrink: 0; width: 20px; height: 20px; margin-top: 1px; accent-color: var(--accent); }
+.storage-options { display: flex; flex-direction: column; gap: 10px; }
+.storage-opt { display: flex; gap: 12px; align-items: flex-start; width: 100%; padding: 14px; text-align: left; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.storage-opt--active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.storage-opt__radio { flex-shrink: 0; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; border: 2px solid var(--border); }
+.storage-opt--active .storage-opt__radio { border: 6px solid var(--accent); }
+.storage-opt__body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.storage-opt__title { font-weight: 600; font-size: 16px; }
+.storage-opt__badge { flex-shrink: 0; align-self: center; padding: 4px 10px; border-radius: 999px; font-size: 14px; font-weight: 600; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.storage-note { font-size: 15px; line-height: 1.45; margin-top: 10px; }
+.promo { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.promo__text { font-size: 15px; line-height: 1.45; }
+.promo__actions { display: flex; gap: 10px; }
+.promo__actions .btn { flex: 1; height: 44px; }

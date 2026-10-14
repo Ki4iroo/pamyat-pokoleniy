@@ -174,6 +174,12 @@ async function loadAllBlobs() {
   return rows.value || [];
 }
 
+async function listBlobIds() {
+  let keys;
+  await withStores(['blobs'], 'readonly', (s) => { keys = capture(s.blobs.getAllKeys()); });
+  return keys.value || [];
+}
+
 async function importRecords({ relatives, stories, blobs }) {
   await withStores(['relatives', 'stories', 'blobs'], 'readwrite', (s) => {
     blobs.forEach((b) => s.blobs.put(b));
@@ -187,4 +193,4 @@ async function estimate() {
   catch { return null; }
 }
 
-export const localRepo = { init, loadAll, saveRelative, deleteRelative, setGreeting, saveStory, removeStoryAudio, deleteStory, loadAudio, clearAll, appendDraftChunk, discardDraft, listDrafts, loadAllBlobs, importRecords, estimate };
+export const localRepo = { init, loadAll, saveRelative, deleteRelative, setGreeting, saveStory, removeStoryAudio, deleteStory, loadAudio, clearAll, appendDraftChunk, discardDraft, listDrafts, loadAllBlobs, listBlobIds, importRecords, estimate };
